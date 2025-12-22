@@ -222,7 +222,7 @@ class ActiveCampaignAutomationRunner
     ): void {
         ActiveCampaignAutomationLog::create([
             'automation_id' => $automation->id,
-            'user_id'       => method_exists($user, 'getAuthIdentifier') ? $user->getAuthIdentifier() : null,
+            'user_id'       => ($user && method_exists($user, 'getAuthIdentifier')) ? $user->getAuthIdentifier() : null,
             'event'         => $event,
             'success'       => $error === null,
             'context'       => $context,
