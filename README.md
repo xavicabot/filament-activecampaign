@@ -264,7 +264,7 @@ Filament UI offers:
 
 ---
 
-## 🚀 Example — Automation on User Registration
+## 🚀 Examples — Automation on User Registration
 
 ### 1. Create automation in Filament:
 
