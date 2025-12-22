@@ -19,7 +19,7 @@ class ActiveCampaignAutomationRunner
     }
 
     /**
-     * API pública: lanzar un trigger libre desde tu proyecto.
+     * API pública: lanzar un trigger libre desde tu proyecto con un usuario autenticado.
      *
      * @param  string  $event   Ej: user.registered, wallet.first_deposit
      * @param  Authenticatable  $user
@@ -27,7 +27,27 @@ class ActiveCampaignAutomationRunner
      */
     public function trigger(string $event, Authenticatable $user, array $context = []): void
     {
-        $this->runForEvent($event, $user, $context);
+        $contactData = [
+            'email'     => $user->email,
+            'firstName' => $user->name ?? '',
+        ];
+
+        $this->runForEventGeneric($event, $user, $contactData, $context);
+    }
+
+    /**
+     * Nuevo: lanzar un trigger sin usuario registrado, proporcionando email y datos opcionales.
+     *
+     * @param string $event
+     * @param string $email
+     * @param array $contactData Opcional: [firstName, lastName, phone, ...]
+     * @param array $context     Contexto opcional para plantillas {ctx.*}
+     */
+    public function triggerWithEmail(string $event, string $email, array $contactData = [], array $context = []): void
+    {
+        $contactData = array_merge(['email' => $email], $contactData);
+
+        $this->runForEventGeneric($event, null, $contactData, $context);
     }
 
     /**
@@ -36,7 +56,7 @@ class ActiveCampaignAutomationRunner
      */
     public function buildExecutionPlan(
         ActiveCampaignAutomation $automation,
-        Authenticatable $user,
+        ?Authenticatable $user,
         array $context = []
     ): array {
         $warnings = [];
@@ -142,6 +162,19 @@ class ActiveCampaignAutomationRunner
      */
     protected function runForEvent(string $event, Authenticatable $user, array $context = []): void
     {
+        $contactData = [
+            'email'     => $user->email,
+            'firstName' => $user->name ?? '',
+        ];
+
+        $this->runForEventGeneric($event, $user, $contactData, $context);
+    }
+
+    /**
+     * Ejecución genérica permitiendo usuario opcional y datos de contacto explícitos.
+     */
+    protected function runForEventGeneric(string $event, ?Authenticatable $user, array $contactData, array $context = []): void
+    {
         $automations = ActiveCampaignAutomation::query()
             ->where('event', $event)
             ->where('is_active', true)
@@ -151,15 +184,21 @@ class ActiveCampaignAutomationRunner
             return;
         }
 
-        $contactId = $this->ensureActiveCampaignContactId($user);
+        // Aseguramos email
+        if (empty($contactData['email'])) {
+            throw new \InvalidArgumentException('Contact email is required to trigger an automation.');
+        }
+
+        $contactId = $this->acService->getOrCreateContactIdByEmail($contactData);
+        $contactEmail = (string) $contactData['email'];
 
         foreach ($automations as $automation) {
             // Construimos el plan para logs / preview
             $plan = $this->buildExecutionPlan($automation, $user, $context);
 
             try {
-                // Ejecutamos la lógica real que ya tenías
-                $this->runAutomation($automation, $user, $contactId, $context);
+                // Ejecutamos la lógica real
+                $this->runAutomation($automation, $user, $contactId, $contactEmail, $context);
 
                 // Log OK
                 $this->logExecution($automation, $user, $event, $context, $plan, null);
@@ -175,7 +214,7 @@ class ActiveCampaignAutomationRunner
      */
     protected function logExecution(
         ActiveCampaignAutomation $automation,
-        Authenticatable $user,
+        ?Authenticatable $user,
         string $event,
         array $context,
         array $plan,
@@ -214,8 +253,9 @@ class ActiveCampaignAutomationRunner
 
     protected function runAutomation(
         ActiveCampaignAutomation $automation,
-        Authenticatable $user,
+        ?Authenticatable $user,
         string $contactId,
+        string $contactEmail,
         array $context = []
     ): void {
         // Lista
@@ -254,7 +294,7 @@ class ActiveCampaignAutomationRunner
 
             // Hacemos un syncContact incremental
             $this->acService->syncContact(array_merge([
-                'email' => $user->email,
+                'email' => $contactEmail,
             ], $payload));
         }
     }
@@ -286,7 +326,7 @@ class ActiveCampaignAutomationRunner
     protected function setFieldByAcId(
         string $fieldAcId,
         string $contactId,
-        Authenticatable $user,
+        ?Authenticatable $user,
         string $valueTemplate,
         array $context = []
     ): void {
@@ -303,7 +343,7 @@ class ActiveCampaignAutomationRunner
         $this->acService->setFieldValueForContact($contactId, $field->name, $value);
     }
 
-    protected function renderTemplate(string $template, Authenticatable $user, array $context = []): string
+    protected function renderTemplate(string $template, ?Authenticatable $user, array $context = []): string
     {
         // Aseguramos string
         $result = (string) $template;
