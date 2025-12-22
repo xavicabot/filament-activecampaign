@@ -146,6 +146,43 @@ ActiveCampaignAutomations::trigger('post.published', $user, [
 ]);
 ```
 
+### Trigger without a registered user (by email)
+
+You can also trigger automations for contacts that are not users in your system by providing an email and optional contact data. The contact will be created/synced in ActiveCampaign if it does not exist.
+
+Basic usage:
+
+```php
+use XaviCabot\FilamentActiveCampaign\Facades\ActiveCampaignAutomations;
+
+ActiveCampaignAutomations::triggerWithEmail('newsletter.signup', 'john@example.com');
+```
+
+With optional contact data and context:
+
+```php
+ActiveCampaignAutomations::triggerWithEmail(
+    'lead.captured',
+    'jane@example.com',
+    [
+        'firstName' => 'Jane',
+        'lastName'  => 'Doe',
+        'phone'     => '+1 555 123 4567',
+    ],
+    [
+        'source' => 'landing-123',
+        'utm'    => [
+            'campaign' => 'winter-sale',
+        ],
+    ]
+);
+```
+
+Notes:
+- email is required; other contact fields are optional.
+- System fields defined in the automation will be synced using the provided email.
+- Template placeholders {ctx.*} work as usual; {user.*} placeholders will be left as-is if no user is provided.
+
 ---
 
 ## 🧩 Template Engine
