@@ -12,6 +12,7 @@ use XaviCabot\FilamentActiveCampaign\Services\ActiveCampaignService;
  * @method static void   addTagToContact(string $contactId, string $tagName)
  * @method static void   setFieldValueForContact(string $contactId, string $fieldName, string $value)
  * @method static \XaviCabot\FilamentActiveCampaign\Models\ActiveCampaignTag createTag(string $name, ?string $description = null)
+ * @method static \XaviCabot\FilamentActiveCampaign\Models\ActiveCampaignTag getOrCreateTag(string $name, ?string $description = null)
  * @method static int    syncLists()
  * @method static int    syncTags()
  * @method static int    syncFields()

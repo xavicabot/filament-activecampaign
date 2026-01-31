@@ -91,33 +91,52 @@ You can create new tags either from the Filament UI or programmatically from you
 2. Click the **"Create Tag"** button in the header
 3. Fill in the form:
    - **Tag Name** (required) - The name as it will appear in ActiveCampaign
-   - **Description** (optional) - Internal reference note
+   - **Description** (optional) - Internal reference note (only used when creating new tags)
 4. Submit
+
+**Smart behavior:** If the tag name already exists (locally or in ActiveCampaign), it will be retrieved instead of creating a duplicate. No errors, just works!
 
 ### From Code
 
-Use the `ActiveCampaign` facade to create tags programmatically:
+Use the `ActiveCampaign` facade to create or retrieve tags programmatically:
+
+#### Recommended: `getOrCreateTag()` (Safe, no duplicates)
 
 ```php
 use XaviCabot\FilamentActiveCampaign\Facades\ActiveCampaign;
 
-// Create a tag with name only
-$tag = ActiveCampaign::createTag('VIP Customer');
+// Get existing tag or create if it doesn't exist
+$tag = ActiveCampaign::getOrCreateTag('VIP Customer');
 
-// Create a tag with name and description
-$tag = ActiveCampaign::createTag('Premium Member', 'Users with premium subscription');
+// With description (only used if creating)
+$tag = ActiveCampaign::getOrCreateTag('Premium Member', 'Users with premium subscription');
 
 // The returned $tag is an ActiveCampaignTag model instance
-echo $tag->ac_id;      // ActiveCampaign ID
-echo $tag->name;       // Tag name
+echo $tag->ac_id;       // ActiveCampaign ID
+echo $tag->name;        // Tag name
 echo $tag->description; // Optional description
 ```
 
-**What happens when you create a tag:**
-- Created in ActiveCampaign via API
-- Stored locally in your database with the returned ActiveCampaign ID
-- Immediately available in automation tag selectors
-- Cache automatically invalidated for instant use
+**What happens with `getOrCreateTag()`:**
+1. Searches local database first (case-insensitive)
+2. If not found locally, searches ActiveCampaign API
+3. If found in AC but not locally, syncs it to local database
+4. If not found anywhere, creates it in ActiveCampaign and stores locally
+5. Cache automatically updated for instant use
+
+**Benefits:**
+- ✅ No duplicate errors
+- ✅ Idempotent (safe to call multiple times)
+- ✅ Handles sync automatically
+
+#### Alternative: `createTag()` (Always creates new)
+
+```php
+// Only use if you're sure the tag doesn't exist
+$tag = ActiveCampaign::createTag('New Tag', 'Description');
+```
+
+**Warning:** This method will fail if the tag already exists in ActiveCampaign.
 
 **Note:** All tags are created with type `contact` (the standard type for 99% of use cases).
 

@@ -226,4 +226,52 @@ class ActiveCampaignService
         return $tag;
     }
 
+    /**
+     * Get an existing tag or create it if it doesn't exist
+     *
+     * This method searches for a tag by name in the following order:
+     * 1. Local database (case-insensitive)
+     * 2. ActiveCampaign API
+     * 3. Creates it in ActiveCampaign if not found
+     *
+     * @param string $name Tag name
+     * @param string|null $description Optional description (only used if creating)
+     * @return ActiveCampaignTag Existing or newly created tag model instance
+     * @throws ActiveCampaignException
+     */
+    public function getOrCreateTag(string $name, ?string $description = null): ActiveCampaignTag
+    {
+        // 1. Check local database first (case-insensitive)
+        $localTag = ActiveCampaignTag::whereRaw('LOWER(name) = ?', [strtolower($name)])->first();
+
+        if ($localTag) {
+            return $localTag;
+        }
+
+        // 2. Search in ActiveCampaign API
+        $data = $this->client->listTags(['search' => $name]);
+
+        $existingTag = collect($data['tags'] ?? [])
+            ->first(fn ($tag) => strcasecmp($tag['tag'] ?? '', $name) === 0);
+
+        // 3. If found in AC but not in local DB, sync it locally
+        if ($existingTag && isset($existingTag['id'])) {
+            $tag = ActiveCampaignTag::create([
+                'ac_id' => (string) $existingTag['id'],
+                'name' => $existingTag['tag'] ?? $name,
+                'tag_type' => $existingTag['tagType'] ?? 'contact',
+                'description' => $existingTag['description'] ?? null,
+            ]);
+
+            // Update cache
+            $cacheKey = 'activecampaign.tag_id.' . md5($name);
+            Cache::put($cacheKey, $tag->ac_id, now()->addMinutes((int) config('activecampaign.cache_ttl', 60)));
+
+            return $tag;
+        }
+
+        // 4. Tag doesn't exist anywhere, create it
+        return $this->createTag($name, $description);
+    }
+
 }
