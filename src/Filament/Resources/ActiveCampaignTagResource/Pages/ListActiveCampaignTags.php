@@ -27,52 +27,44 @@ class ListActiveCampaignTags extends ListRecords
                         ->label(__('Tag Name'))
                         ->required()
                         ->maxLength(255)
-                        ->unique(
-                            table: ActiveCampaignTag::class,
-                            column: 'name',
-                            ignoreRecord: false
-                        )
-                        ->validationMessages([
-                            'unique' => __('A tag with this name already exists.'),
-                        ])
-                        ->helperText(__('The name of the tag as it will appear in ActiveCampaign'))
+                        ->helperText(__('The name of the tag as it will appear in ActiveCampaign. If the tag already exists, it will be retrieved instead of creating a duplicate.'))
                         ->placeholder(__('e.g., VIP Customer')),
 
                     TextInput::make('description')
                         ->label(__('Description'))
                         ->maxLength(255)
-                        ->helperText(__('Optional description for internal reference')),
+                        ->helperText(__('Optional description for internal reference (only used when creating a new tag)')),
                 ])
                 ->action(function (array $data, ActiveCampaignService $service): void {
                     try {
-                        // Create tag in ActiveCampaign and store locally
-                        $tag = $service->createTag(
+                        // Get existing tag or create if it doesn't exist
+                        $tag = $service->getOrCreateTag(
                             name: $data['name'],
                             description: $data['description'] ?? null
                         );
 
                         Notification::make()
-                            ->title(__('Tag created successfully'))
-                            ->body(__('Tag ":name" has been created in ActiveCampaign with ID: :id', [
+                            ->title(__('Tag ready'))
+                            ->body(__('Tag ":name" is now available (ID: :id)', [
                                 'name' => $tag->name,
                                 'id' => $tag->ac_id,
                             ]))
                             ->success()
                             ->send();
 
-                        // Refresh the table to show the new tag
+                        // Refresh the table to show the tag
                         $this->dispatch('$refresh');
 
                     } catch (ActiveCampaignException $e) {
                         Notification::make()
-                            ->title(__('Failed to create tag'))
+                            ->title(__('Failed to get or create tag'))
                             ->body($e->getMessage())
                             ->danger()
                             ->send();
                     } catch (\Throwable $e) {
                         Notification::make()
                             ->title(__('Unexpected error'))
-                            ->body(__('An error occurred while creating the tag: :error', ['error' => $e->getMessage()]))
+                            ->body(__('An error occurred: :error', ['error' => $e->getMessage()]))
                             ->danger()
                             ->send();
                     }
