@@ -81,11 +81,11 @@ The Automations resource includes a **"Sync metadata"** button to refresh lists/
 
 ---
 
-## 🏷️ Creating Tags from Filament
+## 🏷️ Creating Tags
 
-You can create new tags directly from the **Tags** resource in Filament without needing CLI access to ActiveCampaign.
+You can create new tags either from the Filament UI or programmatically from your code.
 
-### How to create a tag:
+### From Filament UI
 
 1. Navigate to **ActiveCampaign Tags** in Filament
 2. Click the **"Create Tag"** button in the header
@@ -94,11 +94,30 @@ You can create new tags directly from the **Tags** resource in Filament without 
    - **Description** (optional) - Internal reference note
 4. Submit
 
-The tag will be:
+### From Code
+
+Use the `ActiveCampaign` facade to create tags programmatically:
+
+```php
+use XaviCabot\FilamentActiveCampaign\Facades\ActiveCampaign;
+
+// Create a tag with name only
+$tag = ActiveCampaign::createTag('VIP Customer');
+
+// Create a tag with name and description
+$tag = ActiveCampaign::createTag('Premium Member', 'Users with premium subscription');
+
+// The returned $tag is an ActiveCampaignTag model instance
+echo $tag->ac_id;      // ActiveCampaign ID
+echo $tag->name;       // Tag name
+echo $tag->description; // Optional description
+```
+
+**What happens when you create a tag:**
 - Created in ActiveCampaign via API
-- Stored locally in your database
+- Stored locally in your database with the returned ActiveCampaign ID
 - Immediately available in automation tag selectors
-- Automatically invalidated from cache for instant use
+- Cache automatically invalidated for instant use
 
 **Note:** All tags are created with type `contact` (the standard type for 99% of use cases).
 
