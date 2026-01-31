@@ -81,6 +81,29 @@ The Automations resource includes a **"Sync metadata"** button to refresh lists/
 
 ---
 
+## 🏷️ Creating Tags from Filament
+
+You can create new tags directly from the **Tags** resource in Filament without needing CLI access to ActiveCampaign.
+
+### How to create a tag:
+
+1. Navigate to **ActiveCampaign Tags** in Filament
+2. Click the **"Create Tag"** button in the header
+3. Fill in the form:
+   - **Tag Name** (required) - The name as it will appear in ActiveCampaign
+   - **Description** (optional) - Internal reference note
+4. Submit
+
+The tag will be:
+- Created in ActiveCampaign via API
+- Stored locally in your database
+- Immediately available in automation tag selectors
+- Automatically invalidated from cache for instant use
+
+**Note:** All tags are created with type `contact` (the standard type for 99% of use cases).
+
+---
+
 ## 📦 Filament Resources Included
 
 | Resource | Purpose |
@@ -88,7 +111,7 @@ The Automations resource includes a **"Sync metadata"** button to refresh lists/
 | **Automations** | Create automations triggered by custom events |
 | **Automation Logs** | Inspect execution results, payloads, warnings, errors |
 | **Lists** | Read-only view of AC lists |
-| **Tags** | Read-only view of AC tags |
+| **Tags** | View and create AC tags |
 | **Fields** | Read-only view of AC custom fields |
 
 ---
