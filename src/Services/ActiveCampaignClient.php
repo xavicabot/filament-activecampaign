@@ -102,6 +102,34 @@ class ActiveCampaignClient
         return $this->handle($response);
     }
 
+    /**
+     * Create a new tag in ActiveCampaign
+     *
+     * @param string $name Tag name
+     * @param string $tagType Tag type (default: 'contact')
+     * @param string|null $description Optional tag description
+     * @return array API response with created tag data
+     * @throws ActiveCampaignException
+     */
+    public function createTag(string $name, string $tagType = 'contact', ?string $description = null): array
+    {
+        $payload = [
+            'tag' => [
+                'tag' => $name,
+                'tagType' => $tagType,
+            ],
+        ];
+
+        if ($description !== null) {
+            $payload['tag']['description'] = $description;
+        }
+
+        $response = $this->newRequest()
+            ->post('tags', $payload);
+
+        return $this->handle($response);
+    }
+
     // CAMPOS
     public function listFields(array $params = []): array
     {
