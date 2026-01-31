@@ -191,4 +191,39 @@ class ActiveCampaignService
         return $totalSynced;
     }
 
+    /**
+     * Create a new tag in ActiveCampaign and store it locally
+     *
+     * @param string $name Tag name
+     * @param string|null $description Optional description
+     * @return ActiveCampaignTag Created tag model instance
+     * @throws ActiveCampaignException
+     */
+    public function createTag(string $name, ?string $description = null): ActiveCampaignTag
+    {
+        // Call ActiveCampaign API (always use 'contact' type)
+        $response = $this->client->createTag($name, 'contact', $description);
+
+        // Validate response structure
+        if (!isset($response['tag']['id'])) {
+            throw new ActiveCampaignException('Could not obtain tag id from ActiveCampaign response.');
+        }
+
+        $tagData = $response['tag'];
+
+        // Store in local database
+        $tag = ActiveCampaignTag::create([
+            'ac_id' => (string) $tagData['id'],
+            'name' => $tagData['tag'] ?? $name,
+            'tag_type' => $tagData['tagType'] ?? 'contact',
+            'description' => $tagData['description'] ?? $description,
+        ]);
+
+        // Invalidate cache for this tag name to ensure fresh lookups
+        $cacheKey = 'activecampaign.tag_id.' . md5($name);
+        Cache::forget($cacheKey);
+
+        return $tag;
+    }
+
 }
