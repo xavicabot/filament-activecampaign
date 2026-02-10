@@ -189,8 +189,23 @@ class ActiveCampaignAutomationRunner
             throw new \InvalidArgumentException('Contact email is required to trigger an automation.');
         }
 
-        $contactId = $this->acService->getOrCreateContactIdByEmail($contactData);
         $contactEmail = (string) $contactData['email'];
+        $contactId = $this->acService->getOrCreateContactIdByEmail($contactData);
+
+        // Si el contacto no pudo crearse (error de validación como email inválido),
+        // logueamos el error para cada automatización y retornamos sin romper el flujo.
+        if ($contactId === null) {
+            $validationError = new \RuntimeException(
+                "Contact sync failed for '{$contactEmail}': validation error in ActiveCampaign"
+            );
+
+            foreach ($automations as $automation) {
+                $plan = $this->buildExecutionPlan($automation, $user, $context);
+                $this->logExecution($automation, $user, $event, $context, $plan, $validationError);
+            }
+
+            return;
+        }
 
         foreach ($automations as $automation) {
             // Construimos el plan para logs / preview
@@ -231,7 +246,7 @@ class ActiveCampaignAutomationRunner
         ]);
     }
 
-    protected function ensureActiveCampaignContactId(Authenticatable $user): string
+    protected function ensureActiveCampaignContactId(Authenticatable $user): ?string
     {
         if (isset($user->activecampaign_contact_id) && $user->activecampaign_contact_id) {
             return (string) $user->activecampaign_contact_id;
@@ -241,6 +256,10 @@ class ActiveCampaignAutomationRunner
             'email'     => $user->email,
             'firstName' => $user->name ?? '',
         ]);
+
+        if ($contactId === null) {
+            return null;
+        }
 
         // Si el modelo tiene la columna, lo guardamos (si no, pasamos de largo).
         if ($this->hasColumn($user, 'activecampaign_contact_id')) {

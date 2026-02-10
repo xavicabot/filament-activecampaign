@@ -6,11 +6,14 @@ namespace XaviCabot\FilamentActiveCampaign\Tests\Feature;
 
 use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
+use XaviCabot\FilamentActiveCampaign\Exceptions\ActiveCampaignException;
 use XaviCabot\FilamentActiveCampaign\Models\ActiveCampaignAutomation;
 use XaviCabot\FilamentActiveCampaign\Models\ActiveCampaignAutomationLog;
 use XaviCabot\FilamentActiveCampaign\Models\ActiveCampaignList;
 use XaviCabot\FilamentActiveCampaign\Models\ActiveCampaignTag;
 use XaviCabot\FilamentActiveCampaign\Services\ActiveCampaignAutomationRunner;
+use XaviCabot\FilamentActiveCampaign\Services\ActiveCampaignService;
 use XaviCabot\FilamentActiveCampaign\Tests\TestCase;
 
 class AutomationExecutionTest extends TestCase
@@ -180,5 +183,141 @@ class AutomationExecutionTest extends TestCase
         $this->assertEquals(['amount' => 100], $log->context);
         $this->assertArrayHasKey('list_ac_id', $log->payload);
         $this->assertArrayHasKey('tags', $log->payload);
+    }
+
+    public function test_email_invalid_does_not_throw_exception(): void
+    {
+        Http::fake([
+            '*/api/3/contact/sync' => Http::response([
+                'errors' => [
+                    [
+                        'title' => 'Email is not valid',
+                        'code' => 'email_invalid',
+                        'error' => 'must_be_valid_email_address',
+                        'source' => ['pointer' => '/data/attributes/email'],
+                    ],
+                ],
+            ], 422),
+        ]);
+
+        ActiveCampaignAutomation::create([
+            'name' => 'Welcome Flow',
+            'event' => 'user.registered',
+            'is_active' => true,
+        ]);
+
+        Log::shouldReceive('warning')
+            ->once()
+            ->withArgs(function (string $message, array $context) {
+                return $message === 'ActiveCampaign contact validation failed'
+                    && $context['email'] === 'invalid-email'
+                    && ! empty($context['validation_errors']);
+            });
+
+        $runner = app(ActiveCampaignAutomationRunner::class);
+
+        // Should NOT throw - must return gracefully
+        $runner->triggerWithEmail('user.registered', 'invalid-email');
+
+        // Should log as failed, not crash
+        $this->assertDatabaseHas('activecampaign_automation_logs', [
+            'event' => 'user.registered',
+            'success' => false,
+        ]);
+
+        $log = ActiveCampaignAutomationLog::first();
+        $this->assertStringContains("invalid-email", $log->error_message);
+    }
+
+    public function test_email_invalid_logs_error_with_email_in_context(): void
+    {
+        Http::fake([
+            '*/api/3/contact/sync' => Http::response([
+                'errors' => [
+                    [
+                        'title' => 'Email is not valid',
+                        'code' => 'email_invalid',
+                        'error' => 'must_be_valid_email_address',
+                    ],
+                ],
+            ], 422),
+        ]);
+
+        Log::shouldReceive('warning')
+            ->once()
+            ->withArgs(function (string $message, array $context) {
+                return $context['email'] === 'bad@email'
+                    && str_contains($context['error'], 'validation error');
+            });
+
+        $service = app(ActiveCampaignService::class);
+        $result = $service->getOrCreateContactIdByEmail(['email' => 'bad@email']);
+
+        $this->assertNull($result);
+    }
+
+    public function test_server_error_still_throws_exception(): void
+    {
+        Http::fake([
+            '*/api/3/contact/sync' => Http::response('Internal Server Error', 500),
+        ]);
+
+        $service = app(ActiveCampaignService::class);
+
+        $this->expectException(ActiveCampaignException::class);
+        $this->expectExceptionMessage('ActiveCampaign API error:');
+
+        $service->getOrCreateContactIdByEmail(['email' => 'test@example.com']);
+    }
+
+    public function test_auth_error_still_throws_exception(): void
+    {
+        Http::fake([
+            '*/api/3/contact/sync' => Http::response('Unauthorized', 401),
+        ]);
+
+        $service = app(ActiveCampaignService::class);
+
+        $this->expectException(ActiveCampaignException::class);
+
+        $service->getOrCreateContactIdByEmail(['email' => 'test@example.com']);
+    }
+
+    public function test_multiple_automations_all_log_failure_on_invalid_email(): void
+    {
+        Http::fake([
+            '*/api/3/contact/sync' => Http::response([
+                'errors' => [['code' => 'email_invalid']],
+            ], 422),
+        ]);
+
+        ActiveCampaignAutomation::create([
+            'name' => 'Flow A',
+            'event' => 'user.registered',
+            'is_active' => true,
+        ]);
+
+        ActiveCampaignAutomation::create([
+            'name' => 'Flow B',
+            'event' => 'user.registered',
+            'is_active' => true,
+        ]);
+
+        Log::shouldReceive('warning')->once();
+
+        $runner = app(ActiveCampaignAutomationRunner::class);
+        $runner->triggerWithEmail('user.registered', 'invalid');
+
+        // Both automations should have failure logs
+        $this->assertEquals(2, ActiveCampaignAutomationLog::where('success', false)->count());
+    }
+
+    protected function assertStringContains(string $needle, ?string $haystack): void
+    {
+        $this->assertNotNull($haystack);
+        $this->assertTrue(
+            str_contains($haystack, $needle),
+            "Failed asserting that '{$haystack}' contains '{$needle}'."
+        );
     }
 }

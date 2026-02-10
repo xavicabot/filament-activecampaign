@@ -3,7 +3,9 @@
 namespace XaviCabot\FilamentActiveCampaign\Services;
 
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 use XaviCabot\FilamentActiveCampaign\Exceptions\ActiveCampaignException;
+use XaviCabot\FilamentActiveCampaign\Exceptions\ActiveCampaignValidationException;
 use XaviCabot\FilamentActiveCampaign\Models\ActiveCampaignField;
 use XaviCabot\FilamentActiveCampaign\Models\ActiveCampaignList;
 use XaviCabot\FilamentActiveCampaign\Models\ActiveCampaignTag;
@@ -20,9 +22,19 @@ class ActiveCampaignService
         return $this->client->syncContact($data);
     }
 
-    public function getOrCreateContactIdByEmail(array $contactData): string
+    public function getOrCreateContactIdByEmail(array $contactData): ?string
     {
-        $result = $this->client->syncContact($contactData);
+        try {
+            $result = $this->client->syncContact($contactData);
+        } catch (ActiveCampaignValidationException $e) {
+            Log::warning('ActiveCampaign contact validation failed', [
+                'email' => $contactData['email'] ?? 'unknown',
+                'error' => $e->getMessage(),
+                'validation_errors' => $e->getValidationErrors(),
+            ]);
+
+            return null;
+        }
 
         if (! isset($result['contact']['id'])) {
             throw new ActiveCampaignException('Could not obtain contact id from ActiveCampaign response.');
