@@ -5,6 +5,7 @@ namespace XaviCabot\FilamentActiveCampaign\Services;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 use XaviCabot\FilamentActiveCampaign\Exceptions\ActiveCampaignException;
+use XaviCabot\FilamentActiveCampaign\Exceptions\ActiveCampaignValidationException;
 
 class ActiveCampaignClient
 {
@@ -33,6 +34,16 @@ class ActiveCampaignClient
     protected function handle(Response $response): array
     {
         if ($response->failed()) {
+            if ($this->isValidationError($response)) {
+                $body = $response->json() ?? [];
+
+                throw new ActiveCampaignValidationException(
+                    'ActiveCampaign validation error: ' . $response->body(),
+                    $response,
+                    $body['errors'] ?? [],
+                );
+            }
+
             throw new ActiveCampaignException(
                 'ActiveCampaign API error: ' . $response->body(),
                 $response
@@ -40,6 +51,24 @@ class ActiveCampaignClient
         }
 
         return $response->json() ?? [];
+    }
+
+    protected function isValidationError(Response $response): bool
+    {
+        $status = $response->status();
+
+        if ($status === 422) {
+            return true;
+        }
+
+        // ActiveCampaign may return some validation errors as 400
+        if ($status === 400) {
+            $body = $response->json() ?? [];
+
+            return ! empty($body['errors']);
+        }
+
+        return false;
     }
 
     // CONTACTOS
