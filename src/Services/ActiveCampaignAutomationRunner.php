@@ -308,13 +308,21 @@ class ActiveCampaignAutomationRunner
             $payload = [];
 
             foreach ($automation->system_fields as $sysField => $template) {
-                $payload[$sysField] = $this->renderTemplate($template, $user, $context);
+                $resolved = $this->renderTemplate($template, $user, $context);
+
+                if ($this->hasUnresolvedPlaceholders($resolved)) {
+                    continue;
+                }
+
+                $payload[$sysField] = $resolved;
             }
 
-            // Hacemos un syncContact incremental
-            $this->acService->syncContact(array_merge([
-                'email' => $contactEmail,
-            ], $payload));
+            if (! empty($payload)) {
+                // Hacemos un syncContact incremental
+                $this->acService->syncContact(array_merge([
+                    'email' => $contactEmail,
+                ], $payload));
+            }
         }
     }
 
@@ -358,6 +366,10 @@ class ActiveCampaignAutomationRunner
         }
 
         $value = $this->renderTemplate($valueTemplate, $user, $context);
+
+        if ($this->hasUnresolvedPlaceholders($value)) {
+            return;
+        }
 
         $this->acService->setFieldValueForContact($contactId, $field->name, $value);
     }
@@ -403,6 +415,11 @@ class ActiveCampaignAutomationRunner
         }, $result);
 
         return $result;
+    }
+
+    protected function hasUnresolvedPlaceholders(string $value): bool
+    {
+        return (bool) preg_match('/{(user|ctx)\.[^}]+}/', $value);
     }
 
     protected function hasColumn(Authenticatable $user, string $column): bool

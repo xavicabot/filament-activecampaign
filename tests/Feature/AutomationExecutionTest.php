@@ -312,6 +312,100 @@ class AutomationExecutionTest extends TestCase
         $this->assertEquals(2, ActiveCampaignAutomationLog::where('success', false)->count());
     }
 
+    public function test_system_fields_with_null_value_are_not_sent_to_api(): void
+    {
+        Http::fake([
+            '*/api/3/contact/sync' => Http::sequence()
+                ->push(['contact' => ['id' => '123']], 200)  // getOrCreateContact
+                ->push(['contact' => ['id' => '123']], 200), // syncContact (if called)
+            '*' => Http::response([], 200),
+        ]);
+
+        ActiveCampaignAutomation::create([
+            'name' => 'Update Phone',
+            'event' => 'user.updated',
+            'is_active' => true,
+            'system_fields' => [
+                'phone' => '{user.phone}',
+            ],
+        ]);
+
+        $user = $this->createMockUser();
+        // user.phone is not defined, so it resolves to null
+
+        $runner = app(ActiveCampaignAutomationRunner::class);
+        $runner->trigger('user.updated', $user);
+
+        // Only the initial contact/sync call should happen, not a second syncContact with the placeholder
+        Http::assertSentCount(1);
+    }
+
+    public function test_system_fields_with_static_value_are_sent_to_api(): void
+    {
+        Http::fake([
+            '*/api/3/contact/sync' => Http::response([
+                'contact' => ['id' => '123'],
+            ], 200),
+            '*' => Http::response([], 200),
+        ]);
+
+        ActiveCampaignAutomation::create([
+            'name' => 'Set Static Phone',
+            'event' => 'user.updated',
+            'is_active' => true,
+            'system_fields' => [
+                'phone' => '+34600000000',
+            ],
+        ]);
+
+        $user = $this->createMockUser();
+
+        $runner = app(ActiveCampaignAutomationRunner::class);
+        $runner->trigger('user.updated', $user);
+
+        // Two calls: getOrCreateContact + syncContact with the static phone value
+        Http::assertSentCount(2);
+
+        $requests = Http::recorded();
+        $lastRequest = $requests[1][0];
+        $body = json_decode($lastRequest->body(), true);
+        $this->assertEquals('+34600000000', $body['contact']['phone']);
+    }
+
+    public function test_system_fields_mixed_resolved_and_unresolved(): void
+    {
+        Http::fake([
+            '*/api/3/contact/sync' => Http::response([
+                'contact' => ['id' => '123'],
+            ], 200),
+            '*' => Http::response([], 200),
+        ]);
+
+        ActiveCampaignAutomation::create([
+            'name' => 'Mixed Fields',
+            'event' => 'user.updated',
+            'is_active' => true,
+            'system_fields' => [
+                'firstName' => '{user.name}',
+                'phone' => '{user.nonexistent}',
+            ],
+        ]);
+
+        $user = $this->createMockUser();
+
+        $runner = app(ActiveCampaignAutomationRunner::class);
+        $runner->trigger('user.updated', $user);
+
+        // Should send syncContact with only firstName (phone is unresolved)
+        Http::assertSentCount(2);
+
+        $requests = Http::recorded();
+        $lastRequest = $requests[1][0];
+        $body = json_decode($lastRequest->body(), true);
+        $this->assertEquals('John Doe', $body['contact']['firstName']);
+        $this->assertArrayNotHasKey('phone', $body['contact']);
+    }
+
     protected function assertStringContains(string $needle, ?string $haystack): void
     {
         $this->assertNotNull($haystack);
