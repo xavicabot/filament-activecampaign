@@ -115,14 +115,25 @@ class TemplateRenderingTest extends TestCase
         $this->assertEquals('Your first deposit was 200 EUR.', $result);
     }
 
-    public function test_unknown_placeholders_are_left_untouched(): void
+    public function test_null_placeholders_resolve_to_empty_string(): void
     {
         $result = $this->getRenderedValue(
             'Hello {user.unknown}.',
             $this->createMockUser()
         );
 
-        $this->assertEquals('Hello {user.unknown}.', $result);
+        $this->assertEquals('Hello .', $result);
+    }
+
+    public function test_null_placeholder_does_not_send_literal_to_ac(): void
+    {
+        $result = $this->getRenderedValue(
+            '{user.phone}',
+            $this->createMockUser(['phone' => null])
+        );
+
+        $this->assertEquals('', $result);
+        $this->assertStringNotContainsString('{user.', $result);
     }
 
     public function test_now_placeholder_is_replaced(): void

@@ -397,9 +397,9 @@ class ActiveCampaignAutomationRunner
                 $value = data_get($context, $path);
             }
 
-            // Si no hay valor, dejamos el placeholder tal cual para no vaciar la plantilla
+            // Si no hay valor, devolvemos vacío para no enviar el placeholder literal a AC
             if ($value === null) {
-                return $full;
+                return '';
             }
 
             if (is_scalar($value)) {
