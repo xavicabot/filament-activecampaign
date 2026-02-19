@@ -314,6 +314,11 @@ class ActiveCampaignAutomationRunner
                     continue;
                 }
 
+                // Si el template contenía placeholders y se resolvió a vacío, no enviar
+                if ($resolved === '' && preg_match('/{(user|ctx)\.[^}]+}/', $template)) {
+                    continue;
+                }
+
                 $payload[$sysField] = $resolved;
             }
 

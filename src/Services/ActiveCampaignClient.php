@@ -191,4 +191,20 @@ class ActiveCampaignClient
 
         return $this->handle($response);
     }
+
+    public function listContacts(array $params = []): array
+    {
+        $response = $this->newRequest()
+            ->get('contacts', $params);
+
+        return $this->handle($response);
+    }
+
+    public function deleteContact(string $contactId): array
+    {
+        $response = $this->newRequest()
+            ->delete("contacts/{$contactId}");
+
+        return $this->handle($response);
+    }
 }

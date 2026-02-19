@@ -203,6 +203,21 @@ class ActiveCampaignService
         return $totalSynced;
     }
 
+    public function listLists(array $params = []): array
+    {
+        return $this->client->listLists($params);
+    }
+
+    public function listContacts(array $params = []): array
+    {
+        return $this->client->listContacts($params);
+    }
+
+    public function deleteContact(string $contactId): void
+    {
+        $this->client->deleteContact($contactId);
+    }
+
     /**
      * Create a new tag in ActiveCampaign and store it locally
      *
