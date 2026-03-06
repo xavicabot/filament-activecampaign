@@ -20,7 +20,7 @@ class ActiveCampaignSettingsPage extends Page
     protected static bool $shouldRegisterNavigation = false;
 
     protected static ?string $slug = 'activecampaign-settings';
-    protected static string $view = 'filament-activecampaign::pages.settings';
+    protected string $view = 'filament-activecampaign::pages.settings';
 
     public ?string $base_url = '';
     public ?string $api_key = '';
