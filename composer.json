@@ -27,6 +27,6 @@
     },
     "require-dev": {
         "orchestra/testbench": "^9.0",
-        "phpunit/phpunit": "^12.3"
+        "phpunit/phpunit": "^11.0|^12.3"
     }
 }
