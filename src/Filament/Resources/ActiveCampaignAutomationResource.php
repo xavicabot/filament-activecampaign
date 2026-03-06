@@ -2,6 +2,7 @@
 
 namespace XaviCabot\FilamentActiveCampaign\Filament\Resources;
 
+use Filament\Actions;
 use Filament\Forms;
 use Filament\Resources\Resource;
 use Filament\Schemas\Components\Fieldset;
@@ -137,16 +138,16 @@ class ActiveCampaignAutomationResource extends Resource
                     ->sortable(),
             ])
             ->headerActions([
-                Tables\Actions\CreateAction::make()
+                Actions\CreateAction::make()
                 ->label(__('Create automation')),
             ])
             ->filters([])
             ->actions([
-                Tables\Actions\EditAction::make(),
-                Tables\Actions\DeleteAction::make(),
+                Actions\EditAction::make(),
+                Actions\DeleteAction::make(),
             ])
             ->bulkActions([
-                Tables\Actions\DeleteBulkAction::make(),
+                Actions\DeleteBulkAction::make(),
             ]);
     }
 

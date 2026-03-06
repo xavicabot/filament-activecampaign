@@ -2,6 +2,7 @@
 
 namespace XaviCabot\FilamentActiveCampaign\Filament\Resources;
 
+use Filament\Actions;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
@@ -80,7 +81,7 @@ class ActiveCampaignAutomationLogResource extends Resource
             ])
             ->filters([])
             ->actions([
-                Tables\Actions\ViewAction::make()
+                Actions\ViewAction::make()
                     ->modalHeading(__('Automation log details'))
                     ->form([
                         Tables\Columns\TextColumn::make('automation.name')
