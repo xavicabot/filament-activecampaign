@@ -12,8 +12,8 @@ class ActiveCampaignAutomationLogResource extends Resource
 {
     protected static ?string $model = ActiveCampaignAutomationLog::class;
 
-    protected static ?string $navigationIcon  = 'heroicon-o-clipboard-document-list';
-    protected static ?string $navigationGroup = 'ActiveCampaign';
+    protected static string|\BackedEnum|null $navigationIcon  = 'heroicon-o-clipboard-document-list';
+    protected static string|\UnitEnum|null $navigationGroup = 'ActiveCampaign';
     protected static ?string $navigationLabel = null;
 
     public static function getLabel(): ?string

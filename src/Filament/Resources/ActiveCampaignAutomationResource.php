@@ -18,7 +18,7 @@ class ActiveCampaignAutomationResource extends Resource
 {
     protected static ?string $model = ActiveCampaignAutomation::class;
 
-    protected static ?string $navigationIcon  = 'heroicon-o-bolt';
+    protected static string|\BackedEnum|null $navigationIcon  = 'heroicon-o-bolt';
 
     public static function getNavigationLabel(): string
     {

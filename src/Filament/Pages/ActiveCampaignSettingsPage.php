@@ -13,9 +13,9 @@ use XaviCabot\FilamentActiveCampaign\Services\ActiveCampaignService;
 
 class ActiveCampaignSettingsPage extends Page
 {
-    protected static ?string $navigationIcon = 'heroicon-o-cloud';
+    protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-cloud';
     protected static ?string $navigationLabel = null;
-    protected static ?string $navigationGroup = null;
+    protected static string|\UnitEnum|null $navigationGroup = null;
 
     protected static bool $shouldRegisterNavigation = false;
 
