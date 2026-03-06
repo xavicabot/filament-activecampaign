@@ -3,8 +3,9 @@
 namespace XaviCabot\FilamentActiveCampaign\Filament\Resources;
 
 use Filament\Forms;
-use Filament\Forms\Form;
 use Filament\Resources\Resource;
+use Filament\Schemas\Components\Fieldset;
+use Filament\Schemas\Schema;
 use Filament\Tables;
 use Filament\Tables\Table;
 use XaviCabot\FilamentActiveCampaign\Filament\Resources\ActiveCampaignAutomationResource\Pages;
@@ -34,9 +35,9 @@ class ActiveCampaignAutomationResource extends Resource
         return __('Automations');
     }
 
-    public static function form(Form $form): Form
+    public static function form(Schema $schema): Schema
     {
-        return $form
+        return $schema
             ->schema([
                 Forms\Components\TextInput::make('name')
                     ->label(__('Name'))
@@ -58,7 +59,7 @@ class ActiveCampaignAutomationResource extends Resource
                     ->label(__('Active'))
                     ->default(true),
 
-                Forms\Components\Fieldset::make(__('Actions'))
+                Fieldset::make(__('Actions'))
                     ->schema([
                         Forms\Components\Select::make('list_ac_id')
                             ->label(__('Subscribe to list'))
@@ -70,7 +71,8 @@ class ActiveCampaignAutomationResource extends Resource
                             ->searchable()
                             ->placeholder(__('No list')),
 
-                        Forms\Components\MultiSelect::make('tag_ac_ids')
+                        Forms\Components\Select::make('tag_ac_ids')
+                            ->multiple()
                             ->label(__('Add tags'))
                             ->options(
                                 ActiveCampaignTag::query()

@@ -5,7 +5,7 @@ namespace XaviCabot\FilamentActiveCampaign\Filament\Resources\ActiveCampaignAuto
 use Filament\Actions;
 use Filament\Forms;
 use Filament\Infolists\Components\TextEntry;
-use Filament\Infolists\Infolist;
+use Filament\Schemas\Schema;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\EditRecord;
 use XaviCabot\FilamentActiveCampaign\Filament\Resources\ActiveCampaignAutomationResource;
@@ -85,9 +85,9 @@ class EditActiveCampaignAutomation extends EditRecord
         ];
     }
 
-    public function infolist(Infolist $infolist): Infolist
+    public function infolist(Schema $schema): Schema
     {
-        return $infolist
+        return $schema
             ->schema([
                 TextEntry::make('id')->label(__('ID')),
                 TextEntry::make('name')->label(__('Name')),

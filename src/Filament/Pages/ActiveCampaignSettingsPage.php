@@ -4,7 +4,7 @@ namespace XaviCabot\FilamentActiveCampaign\Filament\Pages;
 
 use Filament\Forms;
 use Filament\Actions;
-use Filament\Forms\Form;
+use Filament\Schemas\Schema;
 use Filament\Notifications\Notification;
 use Illuminate\Support\Facades\Artisan;
 use Filament\Pages\Page;
@@ -31,9 +31,9 @@ class ActiveCampaignSettingsPage extends Page
         $this->api_key  = config('activecampaign.api_key');
     }
 
-    public function form(Form $form): Form
+    public function form(Schema $schema): Schema
     {
-        return $form
+        return $schema
             ->schema([
                 Forms\Components\TextInput::make('base_url')
                     ->label(__('Base URL'))

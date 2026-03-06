@@ -3,7 +3,7 @@
 namespace XaviCabot\FilamentActiveCampaign\Filament\Resources\ActiveCampaignAutomationLogResource\Pages;
 
 use Filament\Infolists\Components\TextEntry;
-use Filament\Infolists\Infolist;
+use Filament\Schemas\Schema;
 use Filament\Resources\Pages\ViewRecord;
 use XaviCabot\FilamentActiveCampaign\Filament\Resources\ActiveCampaignAutomationLogResource;
 
@@ -11,9 +11,9 @@ class ViewActiveCampaignAutomationLog extends ViewRecord
 {
     protected static string $resource = ActiveCampaignAutomationLogResource::class;
 
-    public function infolist(Infolist $infolist): Infolist
+    public function infolist(Schema $schema): Schema
     {
-        return $infolist
+        return $schema
             ->schema([
                 TextEntry::make('id')
                     ->label(__('ID')),
