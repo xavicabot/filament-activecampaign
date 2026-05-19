@@ -406,6 +406,146 @@ class AutomationExecutionTest extends TestCase
         $this->assertArrayNotHasKey('phone', $body['contact']);
     }
 
+    public function test_automation_batches_custom_fields_into_single_sync_call(): void
+    {
+        Http::fake([
+            '*/api/3/contact/sync' => Http::response([
+                'contact' => ['id' => '123'],
+            ], 200),
+            '*' => Http::response([], 200),
+        ]);
+
+        \XaviCabot\FilamentActiveCampaign\Models\ActiveCampaignField::create([
+            'ac_id' => '101', 'name' => 'country',
+        ]);
+        \XaviCabot\FilamentActiveCampaign\Models\ActiveCampaignField::create([
+            'ac_id' => '102', 'name' => 'language',
+        ]);
+        \XaviCabot\FilamentActiveCampaign\Models\ActiveCampaignField::create([
+            'ac_id' => '103', 'name' => 'last_login',
+        ]);
+
+        ActiveCampaignAutomation::create([
+            'name' => 'Batch Custom Fields',
+            'event' => 'user.profile_updated',
+            'is_active' => true,
+            'fields' => [
+                ['field_ac_id' => '101', 'value_template' => 'Spain'],
+                ['field_ac_id' => '102', 'value_template' => 'es'],
+                ['field_ac_id' => '103', 'value_template' => '{now_date}'],
+            ],
+        ]);
+
+        $user = $this->createMockUser();
+
+        $runner = app(ActiveCampaignAutomationRunner::class);
+        $runner->trigger('user.profile_updated', $user);
+
+        // Expected: 1 sync to resolve/create contact + 1 sync with all fieldValues batched
+        Http::assertSentCount(2);
+
+        $requests = Http::recorded();
+        $batchBody = json_decode($requests[1][0]->body(), true);
+
+        $this->assertSame('john@example.com', $batchBody['contact']['email']);
+        $this->assertArrayHasKey('fieldValues', $batchBody['contact']);
+        $this->assertCount(3, $batchBody['contact']['fieldValues']);
+
+        $values = collect($batchBody['contact']['fieldValues'])->keyBy('field')->all();
+        $this->assertSame('Spain', $values['101']['value']);
+        $this->assertSame('es', $values['102']['value']);
+        $this->assertSame(now()->toDateString(), $values['103']['value']);
+
+        // The legacy per-field endpoint must not be used anymore
+        Http::assertNotSent(function ($request) {
+            return str_contains($request->url(), '/fieldValues');
+        });
+    }
+
+    public function test_automation_batches_custom_fields_and_system_fields_in_one_call(): void
+    {
+        Http::fake([
+            '*/api/3/contact/sync' => Http::response([
+                'contact' => ['id' => '123'],
+            ], 200),
+            '*' => Http::response([], 200),
+        ]);
+
+        \XaviCabot\FilamentActiveCampaign\Models\ActiveCampaignField::create([
+            'ac_id' => '201', 'name' => 'plan',
+        ]);
+
+        ActiveCampaignAutomation::create([
+            'name' => 'Full Sync',
+            'event' => 'user.subscribed',
+            'is_active' => true,
+            'fields' => [
+                ['field_ac_id' => '201', 'value_template' => '{ctx.plan}'],
+            ],
+            'system_fields' => [
+                'firstName' => '{user.name}',
+                'phone'     => '+34600000000',
+            ],
+        ]);
+
+        $user = $this->createMockUser();
+
+        $runner = app(ActiveCampaignAutomationRunner::class);
+        $runner->trigger('user.subscribed', $user, ['plan' => 'pro']);
+
+        // 1 initial sync to obtain contactId + 1 sync that carries everything
+        Http::assertSentCount(2);
+
+        $requests = Http::recorded();
+        $batchBody = json_decode($requests[1][0]->body(), true);
+
+        $this->assertSame('John Doe', $batchBody['contact']['firstName']);
+        $this->assertSame('+34600000000', $batchBody['contact']['phone']);
+        $this->assertCount(1, $batchBody['contact']['fieldValues']);
+        $this->assertSame('201', $batchBody['contact']['fieldValues'][0]['field']);
+        $this->assertSame('pro', $batchBody['contact']['fieldValues'][0]['value']);
+    }
+
+    public function test_automation_skips_unresolved_field_values_in_batch(): void
+    {
+        Http::fake([
+            '*/api/3/contact/sync' => Http::response([
+                'contact' => ['id' => '123'],
+            ], 200),
+            '*' => Http::response([], 200),
+        ]);
+
+        \XaviCabot\FilamentActiveCampaign\Models\ActiveCampaignField::create([
+            'ac_id' => '301', 'name' => 'country',
+        ]);
+        \XaviCabot\FilamentActiveCampaign\Models\ActiveCampaignField::create([
+            'ac_id' => '302', 'name' => 'missing',
+        ]);
+
+        ActiveCampaignAutomation::create([
+            'name' => 'Skip Unresolved',
+            'event' => 'user.partial',
+            'is_active' => true,
+            'fields' => [
+                ['field_ac_id' => '301', 'value_template' => 'Spain'],
+                ['field_ac_id' => '302', 'value_template' => '{ctx.does_not_exist}'],
+            ],
+        ]);
+
+        $user = $this->createMockUser();
+
+        $runner = app(ActiveCampaignAutomationRunner::class);
+        $runner->trigger('user.partial', $user);
+
+        Http::assertSentCount(2);
+
+        $requests = Http::recorded();
+        $batchBody = json_decode($requests[1][0]->body(), true);
+
+        $this->assertCount(1, $batchBody['contact']['fieldValues']);
+        $this->assertSame('301', $batchBody['contact']['fieldValues'][0]['field']);
+    }
+
     protected function assertStringContains(string $needle, ?string $haystack): void
     {
         $this->assertNotNull($haystack);

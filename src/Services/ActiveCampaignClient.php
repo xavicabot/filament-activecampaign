@@ -107,6 +107,22 @@ class ActiveCampaignClient
         return $this->handle($response);
     }
 
+    public function listContactTags(string $contactId): array
+    {
+        $response = $this->newRequest()
+            ->get("contacts/{$contactId}/contactTags");
+
+        return $this->handle($response);
+    }
+
+    public function detachContactTag(string $associationId): array
+    {
+        $response = $this->newRequest()
+            ->delete("contactTags/{$associationId}");
+
+        return $this->handle($response);
+    }
+
     // TAGS
     public function attachTagToContact(string $contactId, string $tagId): array
     {
