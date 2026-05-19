@@ -142,6 +142,41 @@ $tag = ActiveCampaign::createTag('New Tag', 'Description');
 
 ---
 
+## 🧷 Managing Contact Tags & Lookup
+
+Use the `ActiveCampaign` facade to manage tags on a contact and to look up existing contacts.
+
+```php
+use XaviCabot\FilamentActiveCampaign\Facades\ActiveCampaign;
+
+// Find a contact by email (returns null if it does not exist)
+$contact = ActiveCampaign::getContactByEmail('jane@example.com');
+
+// Attach one tag
+ActiveCampaign::addTagToContact($contact['id'], 'vip');
+
+// Attach several tags in one call
+ActiveCampaign::addTagToContact($contact['id'], ['vip', 'beta-tester']);
+
+// List the tag associations for a contact
+$associations = ActiveCampaign::getContactTags($contact['id']);
+
+// Detach a tag by name (no-op if it is not attached)
+ActiveCampaign::removeTagFromContact($contact['id'], 'beta-tester');
+```
+
+Tag names are resolved to ActiveCampaign IDs using the same cached lookup as `addTagToContact` — make sure the tag has been synced (`php artisan activecampaign:sync-metadata --tags`) or created beforehand.
+
+---
+
+## ⚡ Single-Call Field Sync
+
+When an automation has multiple `fields` and/or `system_fields`, the package now sends them in a **single** `POST /contact/sync` request (plus the initial contact resolution call) instead of one HTTP call per field. No code change is required on the consumer side — existing automations benefit automatically.
+
+> **Behavioural note:** a custom field whose template references `{user.*}` or `{ctx.*}` and resolves to an empty value is now omitted from the payload (it used to be sent as an empty string). This mirrors how `system_fields` already behaved and prevents accidental overwrites with blank values.
+
+---
+
 ## 📦 Filament Resources Included
 
 | Resource | Purpose |
@@ -243,6 +278,67 @@ Notes:
 - email is required; other contact fields are optional.
 - System fields defined in the automation will be synced using the provided email.
 - Template placeholders {ctx.*} work as usual; {user.*} placeholders will be left as-is if no user is provided.
+
+---
+
+## 🔀 Async (Queue) Support
+
+By default, automations run synchronously. You can enable async execution to dispatch triggers to a Laravel queue.
+
+### Configuration
+
+In your published `config/activecampaign.php`:
+
+```php
+'async'         => false,        // Set to true to dispatch all triggers to queue
+'queue'         => 'default',    // Queue name
+'async_tries'   => 3,            // Max retry attempts
+'async_backoff' => [10, 60],     // Backoff in seconds between retries
+```
+
+Or use environment variables:
+
+```env
+ACTIVECAMPAIGN_ASYNC=true
+ACTIVECAMPAIGN_QUEUE=activecampaign
+```
+
+### Usage
+
+#### Option 1: Global async via config
+
+Set `async => true` in config. All `trigger()` and `triggerWithEmail()` calls will automatically dispatch to the queue:
+
+```php
+// These will be queued automatically when async is enabled
+ActiveCampaignAutomations::trigger('user.registered', $user);
+ActiveCampaignAutomations::triggerWithEmail('newsletter.signup', 'jane@example.com');
+```
+
+#### Option 2: Explicit async methods
+
+Use `triggerAsync()` or `triggerWithEmailAsync()` to always dispatch to the queue, regardless of the `async` config value:
+
+```php
+// Always queued, even if async config is false
+ActiveCampaignAutomations::triggerAsync('user.registered', $user, ['plan' => 'pro']);
+
+ActiveCampaignAutomations::triggerWithEmailAsync('lead.captured', 'jane@example.com', [
+    'firstName' => 'Jane',
+], [
+    'source' => 'landing-page',
+]);
+```
+
+### How it works
+
+- The job serializes only primitive data (event name, user ID, email, contact data, context) — no Eloquent models are serialized.
+- When a `userId` is provided, the job resolves the user from the database at execution time. If the user no longer exists, the job exits gracefully without errors.
+- Retries and backoff are configurable via `async_tries` and `async_backoff`.
+
+### Retrocompatibility
+
+With `async => false` (default), the package behaves exactly as before — all triggers execute synchronously. No changes needed in existing code.
 
 ---
 

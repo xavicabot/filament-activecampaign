@@ -48,11 +48,39 @@ class ActiveCampaignService
         $this->client->subscribeContactToList($contactId, $listId);
     }
 
-    public function addTagToContact(string $contactId, string $tagName): void
+    public function addTagToContact(string $contactId, string|array $tagName): void
+    {
+        foreach ((array) $tagName as $name) {
+            $tagId = $this->getTagIdByName($name);
+
+            $this->client->attachTagToContact($contactId, $tagId);
+        }
+    }
+
+    public function removeTagFromContact(string $contactId, string $tagName): void
     {
         $tagId = $this->getTagIdByName($tagName);
 
-        $this->client->attachTagToContact($contactId, $tagId);
+        $contactTags = $this->client->listContactTags($contactId)['contactTags'] ?? [];
+
+        $association = collect($contactTags)
+            ->first(fn ($entry) => (string) ($entry['tag'] ?? '') === (string) $tagId);
+
+        if (! $association || ! isset($association['id'])) {
+            return;
+        }
+
+        $this->client->detachContactTag((string) $association['id']);
+    }
+
+    public function getContactTags(string $contactId): array
+    {
+        return $this->client->listContactTags($contactId);
+    }
+
+    public function getContactByEmail(string $email): ?array
+    {
+        return $this->client->getContactByEmail($email);
     }
 
     public function setFieldValueForContact(string $contactId, string $fieldName, string $value): void

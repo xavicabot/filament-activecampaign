@@ -5,6 +5,7 @@ namespace XaviCabot\FilamentActiveCampaign\Services;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Str;
+use XaviCabot\FilamentActiveCampaign\Jobs\TriggerActiveCampaignAutomationJob;
 use XaviCabot\FilamentActiveCampaign\Models\ActiveCampaignAutomation;
 use XaviCabot\FilamentActiveCampaign\Models\ActiveCampaignAutomationLog;
 use XaviCabot\FilamentActiveCampaign\Models\ActiveCampaignField;
@@ -32,7 +33,26 @@ class ActiveCampaignAutomationRunner
             'firstName' => $user->name ?? '',
         ];
 
+        if (config('activecampaign.async')) {
+            $this->dispatchJob($event, $user, $contactData, $context);
+
+            return;
+        }
+
         $this->runForEventGeneric($event, $user, $contactData, $context);
+    }
+
+    /**
+     * Always dispatch to queue, regardless of async config.
+     */
+    public function triggerAsync(string $event, Authenticatable $user, array $context = []): void
+    {
+        $contactData = [
+            'email'     => $user->email,
+            'firstName' => $user->name ?? '',
+        ];
+
+        $this->dispatchJob($event, $user, $contactData, $context);
     }
 
     /**
@@ -47,7 +67,23 @@ class ActiveCampaignAutomationRunner
     {
         $contactData = array_merge(['email' => $email], $contactData);
 
+        if (config('activecampaign.async')) {
+            $this->dispatchJob($event, null, $contactData, $context);
+
+            return;
+        }
+
         $this->runForEventGeneric($event, null, $contactData, $context);
+    }
+
+    /**
+     * Always dispatch to queue, regardless of async config.
+     */
+    public function triggerWithEmailAsync(string $event, string $email, array $contactData = [], array $context = []): void
+    {
+        $contactData = array_merge(['email' => $email], $contactData);
+
+        $this->dispatchJob($event, null, $contactData, $context);
     }
 
     /**
@@ -173,7 +209,7 @@ class ActiveCampaignAutomationRunner
     /**
      * Ejecución genérica permitiendo usuario opcional y datos de contacto explícitos.
      */
-    protected function runForEventGeneric(string $event, ?Authenticatable $user, array $contactData, array $context = []): void
+    public function runForEventGeneric(string $event, ?Authenticatable $user, array $contactData, array $context = []): void
     {
         $automations = ActiveCampaignAutomation::query()
             ->where('event', $event)
@@ -277,12 +313,10 @@ class ActiveCampaignAutomationRunner
         string $contactEmail,
         array $context = []
     ): void {
-        // Lista
         if ($automation->list_ac_id) {
             $this->subscribeToList($automation->list_ac_id, $contactId);
         }
 
-        // Tags
         $tagIds = collect($automation->tag_ac_ids ?? [])
             ->filter()
             ->values();
@@ -291,7 +325,36 @@ class ActiveCampaignAutomationRunner
             $this->attachTagByAcId($tagAcId, $contactId);
         }
 
-        // Campos (custom fields)
+        $fieldValues  = $this->buildFieldValuesPayload($automation, $user, $context);
+        $systemFields = $this->buildSystemFieldsPayload($automation, $user, $context);
+
+        if (empty($fieldValues) && empty($systemFields)) {
+            return;
+        }
+
+        $contactPayload = array_merge(
+            ['email' => $contactEmail],
+            $systemFields,
+        );
+
+        if (! empty($fieldValues)) {
+            $contactPayload['fieldValues'] = $fieldValues;
+        }
+
+        $this->acService->syncContact($contactPayload);
+    }
+
+    /**
+     * Resolve automation->fields into AC fieldValues structure, skipping
+     * entries whose template cannot be rendered or that reference an unknown ac_id.
+     */
+    protected function buildFieldValuesPayload(
+        ActiveCampaignAutomation $automation,
+        ?Authenticatable $user,
+        array $context
+    ): array {
+        $fieldValues = [];
+
         foreach ($automation->fields ?? [] as $fieldConfig) {
             $fieldAcId     = Arr::get($fieldConfig, 'field_ac_id');
             $valueTemplate = Arr::get($fieldConfig, 'value_template', '');
@@ -300,35 +363,59 @@ class ActiveCampaignAutomationRunner
                 continue;
             }
 
-            $this->setFieldByAcId($fieldAcId, $contactId, $user, $valueTemplate, $context);
-        }
+            $fieldExists = ActiveCampaignField::query()
+                ->where('ac_id', $fieldAcId)
+                ->exists();
 
-        // --- SYSTEM FIELDS (firstName, lastName, phone, etc.) ----
-        if (! empty($automation->system_fields)) {
-            $payload = [];
-
-            foreach ($automation->system_fields as $sysField => $template) {
-                $resolved = $this->renderTemplate($template, $user, $context);
-
-                if ($this->hasUnresolvedPlaceholders($resolved)) {
-                    continue;
-                }
-
-                // Si el template contenía placeholders y se resolvió a vacío, no enviar
-                if ($resolved === '' && preg_match('/{(user|ctx)\.[^}]+}/', $template)) {
-                    continue;
-                }
-
-                $payload[$sysField] = $resolved;
+            if (! $fieldExists) {
+                continue;
             }
 
-            if (! empty($payload)) {
-                // Hacemos un syncContact incremental
-                $this->acService->syncContact(array_merge([
-                    'email' => $contactEmail,
-                ], $payload));
+            $value = $this->renderTemplate($valueTemplate, $user, $context);
+
+            if ($this->hasUnresolvedPlaceholders($value)) {
+                continue;
             }
+
+            // Mirror system_fields semantics: a template that referenced
+            // {user.*}/{ctx.*} and collapsed to empty should not blank the field.
+            if ($value === '' && preg_match('/{(user|ctx)\.[^}]+}/', $valueTemplate)) {
+                continue;
+            }
+
+            $fieldValues[] = [
+                'field' => (string) $fieldAcId,
+                'value' => $value,
+            ];
         }
+
+        return $fieldValues;
+    }
+
+    protected function buildSystemFieldsPayload(
+        ActiveCampaignAutomation $automation,
+        ?Authenticatable $user,
+        array $context
+    ): array {
+        $payload = [];
+
+        foreach ($automation->system_fields ?? [] as $sysField => $template) {
+            $resolved = $this->renderTemplate($template, $user, $context);
+
+            if ($this->hasUnresolvedPlaceholders($resolved)) {
+                continue;
+            }
+
+            // A template that referenced placeholders but collapsed to empty
+            // should not overwrite the contact attribute with a blank value.
+            if ($resolved === '' && preg_match('/{(user|ctx)\.[^}]+}/', $template)) {
+                continue;
+            }
+
+            $payload[$sysField] = $resolved;
+        }
+
+        return $payload;
     }
 
     protected function subscribeToList(string $listAcId, string $contactId): void
@@ -353,30 +440,6 @@ class ActiveCampaignAutomationRunner
         }
 
         $this->acService->addTagToContact($contactId, $tag->name);
-    }
-
-    protected function setFieldByAcId(
-        string $fieldAcId,
-        string $contactId,
-        ?Authenticatable $user,
-        string $valueTemplate,
-        array $context = []
-    ): void {
-        $field = ActiveCampaignField::query()
-            ->where('ac_id', $fieldAcId)
-            ->first();
-
-        if (! $field) {
-            return;
-        }
-
-        $value = $this->renderTemplate($valueTemplate, $user, $context);
-
-        if ($this->hasUnresolvedPlaceholders($value)) {
-            return;
-        }
-
-        $this->acService->setFieldValueForContact($contactId, $field->name, $value);
     }
 
     protected function renderTemplate(string $template, ?Authenticatable $user, array $context = []): string
@@ -436,5 +499,25 @@ class ActiveCampaignAutomationRunner
         } catch (\Throwable) {
             return false;
         }
+    }
+
+    protected function dispatchJob(string $event, ?Authenticatable $user, array $contactData, array $context): void
+    {
+        $userId = null;
+        $userClass = null;
+
+        if ($user !== null) {
+            $userId = $user->getAuthIdentifier();
+            $userClass = get_class($user);
+        }
+
+        TriggerActiveCampaignAutomationJob::dispatch(
+            event: $event,
+            userId: $userId,
+            userClass: $userClass,
+            email: $contactData['email'],
+            contactData: $contactData,
+            context: $context,
+        );
     }
 }
